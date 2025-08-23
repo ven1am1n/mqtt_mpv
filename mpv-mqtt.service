@@ -1,0 +1,20 @@
+[Unit]
+Description=MPV MQTT Controller (DRM-only)
+After=network.target
+Requires=network-online.target
+
+[Service]
+Type=simple
+User=root
+Environment="DISPLAY="
+Environment="XAUTHORITY="
+ExecStart=/usr/bin/python3 /usr/local/bin/mpv-mqtt-controller.py
+Restart=always
+RestartSec=5
+ExecStop=/usr/bin/pkill -f "mpv.*--vo=drm"
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=mpv-mqtt
+
+[Install]
+WantedBy=multi-user.target

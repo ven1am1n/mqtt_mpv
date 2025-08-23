@@ -1,0 +1,2 @@
+paho-mqtt==1.6.1
+natsort==8.4.0

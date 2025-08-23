@@ -1,0 +1,15 @@
+{
+    "mqtt": {
+        "broker": "192.168.0.143",
+        "port": 1883,
+        "topic": "mpv/control",
+        "username": "mqtt",
+        "password": "mqttpassword"
+    },
+    "mpv": {
+        "socket_path": "/tmp/mpv-socket",
+        "media_dir": "/mnt/Data-storage/Downloads/complete/01PlayVideo/",
+        "file_pattern": ".*\\.(mp4|mkv|avi)$",
+        "playlist_file": "/tmp/mpv-playlist.txt"
+    }
+}
