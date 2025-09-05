@@ -1,0 +1,49 @@
+# Виртуальные окружения
+venv/
+env/
+.venv/
+
+# Файлы кэша Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Единицы тестирования и покрытия
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Переводы
+*.mo
+*.pot
+
+# Файлы редактора
+.vscode/
+
+# Операционные системы
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Файлы окружения
+.env
+.venv
+env.txt
+
+# Файлы журналов и баз данных
+*.log
+*.sql
+*.sqlite
+
+# Временные файлы
+*.tmp
+*.temp
