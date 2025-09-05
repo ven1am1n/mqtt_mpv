@@ -68,11 +68,43 @@ class MPVController:
                 raise FileNotFoundError(f"Media directory {media_dir} not found")
 
             # Получаем список файлов, соответствующих шаблону
-            files = [
-                os.path.join(media_dir, f)
-                for f in os.listdir(media_dir)
-                if re.fullmatch(self.config["mpv"]["file_pattern"], f)
-            ]
+            # Сначала обрабатываем корневую директорию
+            root_files = []
+            for filename in os.listdir(media_dir):
+                file_path = os.path.join(media_dir, filename)
+                if os.path.isfile(file_path) or (os.path.islink(file_path) and not os.path.isdir(file_path)):
+                    if re.fullmatch(self.config["mpv"]["file_pattern"], filename):
+                        root_files.append(file_path)
+
+            # Затем рекурсивно обрабатываем поддиректории
+            subdir_files = []
+            visited_dirs = set()
+            for root, dirs, filenames in os.walk(media_dir, followlinks=True):
+                real_root = os.path.realpath(root)
+                if real_root in visited_dirs:
+                    # Удаляем поддиректории чтобы избежать циклов
+                    dirs[:] = []
+                    continue
+                visited_dirs.add(real_root)
+
+                # Пропускаем корневую директорию (уже обработали)
+                if root == media_dir:
+                    # Но все равно сортируем поддиректории для правильного порядка обхода
+                    dirs.sort(key=self.natural_sort_key)
+                    continue
+
+                # Сортируем директории и файлы для детерминированного порядка
+                dirs.sort(key=self.natural_sort_key)
+                filenames.sort(key=self.natural_sort_key)
+
+                for filename in filenames:
+                    file_path = os.path.join(root, filename)
+                    # Проверяем соответствие паттерну
+                    if re.fullmatch(self.config["mpv"]["file_pattern"], filename):
+                        subdir_files.append(file_path)
+
+            # Объединяем списки: сначала корневая, затем поддиректории
+            files = sorted(root_files, key=self.natural_sort_key) + subdir_files
 
             if not files:
                 print("No media files found matching the pattern")
