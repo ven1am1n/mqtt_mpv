@@ -104,14 +104,16 @@ class MPVController:
                         subdir_files.append(file_path)
 
             # Объединяем списки: сначала корневая, затем поддиректории
-            files = sorted(root_files, key=self.natural_sort_key) + subdir_files
+            # Сортируем корневой список и список поддиректорий отдельно
+            root_sorted = sorted(root_files, key=self.natural_sort_key)
+            subdir_sorted = sorted(subdir_files, key=self.natural_sort_key)
+            files = root_sorted + subdir_sorted
 
             if not files:
                 print("No media files found matching the pattern")
                 return False
 
-            # Сортируем файлы с естественной сортировкой
-            self.playlist = sorted(files, key=lambda x: self.natural_sort_key(os.path.basename(x)))
+            self.playlist = files
 
             with open(playlist_path, "w") as f:
                 f.write("\n".join(self.playlist))
