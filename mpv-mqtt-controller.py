@@ -14,6 +14,7 @@ class MPVController:
     def __init__(self, config_path="./config.json"):
         self.config = self.load_config(config_path)
         self.mpv_process = None
+        self.mpv_log_handle = None  # Add log file handle
         self.playlist = []
         self.is_playing = False
         self.current_state = {
@@ -279,10 +280,37 @@ class MPVController:
             if os.path.exists(self.config["mpv"]["socket_path"]):
                 os.remove(self.config["mpv"]["socket_path"])
 
+            # Handle log file configuration from mpv_log parameter
+            log_config = self.config["mpv"].get("mpv_log", "mpv.log")
+            log_file = None
+
+            if not log_config:
+                # If empty or None, use /dev/null
+                log_file = "/dev/null"
+            else:
+                # Check if absolute path
+                if os.path.isabs(log_config):
+                    log_file = log_config
+                else:
+                    # Relative path - use media_dir as root
+                    log_file = os.path.join(self.config["mpv"]["media_dir"], log_config)
+
+            try:
+                # Try to open log file
+                self.mpv_log_handle = open(log_file, "a")
+            except Exception as e:
+                print(f"Failed to open log file '{log_file}': {e}. Redirecting to /dev/null")
+                log_file = "/dev/null"
+                try:
+                    self.mpv_log_handle = open(log_file, "a")
+                except Exception as e2:
+                    print(f"Critical error opening /dev/null: {e2}. Logging disabled.")
+                    self.mpv_log_handle = None
+
             self.mpv_process = subprocess.Popen(
                 base_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stdout=self.mpv_log_handle,
+                stderr=self.mpv_log_handle,
                 start_new_session=True
             )
 
@@ -352,6 +380,11 @@ class MPVController:
             self.current_state["media_title"] = None
             self.current_state["position"] = 0
             self.current_state["duration"] = 0
+
+            # Close log file if open
+            if self.mpv_log_handle:
+                self.mpv_log_handle.close()
+                self.mpv_log_handle = None
 
     def send_mpv_command(self, command):
         if not self.is_playing:

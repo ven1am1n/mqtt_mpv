@@ -13,6 +13,7 @@
         "socket_path": "/tmp/mpv-socket",
         "media_dir": "/mnt/Data-storage/Downloads/complete/01PlayVideo/",
         "file_pattern": ".*\\.(mp4|mkv|avi)$",
-        "playlist_file": "mpv-playlist.m3u"
+        "playlist_file": "mpv-playlist.m3u",
+        "mpv_log": "mpv.log"
     }
 }
