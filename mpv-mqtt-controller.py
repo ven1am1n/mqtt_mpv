@@ -21,17 +21,25 @@ class MPVController:
             "state": "idle",
             "media_content_id": None,
             "media_title": None,
-            "volume": 100,
+            "volume": 50,
             "position": 0,
             "duration": 0
         }
         self.previous_state = self.current_state.copy()
         self.ipc_socket = None
         self.observation_thread = None
+        self.state_file_timer_thread = None
         self.stop_observation = False
+        self.stop_state_file_timer = False
         self.state_changed = False
         self.last_publish_time = 0
         self.publish_interval = self.config["mqtt"].get("publish_interval", 1.0)  # секунды
+
+        # State file path
+        self.state_file_path = os.path.join(
+            self.config["mpv"]["media_dir"],
+            "mpv_state.json"
+        )
 
     def load_config(self, path):
         try:
@@ -232,6 +240,9 @@ class MPVController:
             elif name == "volume" and data is not None:
                 self.current_state["volume"] = data
 
+        # Update state file after processing event
+        self.update_state_file()
+
     def should_publish_state(self):
         """Проверяет, нужно ли публиковать состояние"""
         current_time = time.time()
@@ -334,6 +345,44 @@ class MPVController:
                 self.setup_property_observation()
                 self.start_observation_thread(state_callback)
 
+                # Apply saved state if available
+                if os.path.exists(self.state_file_path):
+                    try:
+                        with open(self.state_file_path, "r") as f:
+                            state_data = json.load(f)
+
+                        # Set volume from state
+                        vol_cmd = json.dumps({
+                            "command": ["set_property", "volume", state_data["volume"]]
+                        })
+                        self.send_ipc_command(vol_cmd)
+
+                        # If playing same file, set position
+                        if state_data["file"] == self.current_state["media_content_id"]:
+                            seek_cmd = json.dumps({
+                                "command": ["set_property", "time-pos", state_data["position"]]
+                            })
+                            self.send_ipc_command(seek_cmd)
+
+                        # Apply playback state last (must be after position/volume)
+                        if state_data["state"] == "paused":
+                            pause_cmd = json.dumps({
+                                "command": ["set_property", "pause", True]
+                            })
+                            self.send_ipc_command(pause_cmd)
+                        elif state_data["state"] == "playing":
+                            pause_cmd = json.dumps({
+                                "command": ["set_property", "pause", False]
+                            })
+                            self.send_ipc_command(pause_cmd)
+
+                        print("Applied saved state from", self.state_file_path)
+                    except Exception as e:
+                        print(f"Error applying saved state: {e}")
+
+                # Start state file update timer
+                self.start_state_file_timer()
+
                 print("MPV started successfully with property observation")
                 return True
             else:
@@ -346,7 +395,53 @@ class MPVController:
             self.current_state["state"] = "idle"
             return False
 
+    def update_state_file(self):
+        """Updates the JSON state file with current playback info"""
+        if not self.is_playing:
+            # Clear state file when not playing
+            try:
+                if os.path.exists(self.state_file_path):
+                    os.remove(self.state_file_path)
+            except Exception as e:
+                print(f"Error clearing state file: {e}")
+            return
+
+        state_data = {
+            "file": self.current_state["media_content_id"],
+            "position": self.current_state["position"],
+            "volume": self.current_state["volume"],
+            "state": self.current_state["state"]
+        }
+
+        try:
+            # Write to temp file first then atomically replace
+            temp_path = self.state_file_path + ".tmp"
+            with open(temp_path, "w") as f:
+                json.dump(state_data, f, indent=2)
+            os.replace(temp_path, self.state_file_path)
+        except Exception as e:
+            print(f"Error updating state file: {e}")
+
+    def start_state_file_timer(self):
+        """Starts timer to update state file every second"""
+        self.stop_state_file_timer = False
+        def timer_task():
+            while not self.stop_state_file_timer:
+                self.update_state_file()
+                time.sleep(1)
+
+        self.state_file_timer_thread = threading.Thread(target=timer_task)
+        self.state_file_timer_thread.daemon = True
+        self.state_file_timer_thread.start()
+        print("Started state file update timer")
+
     def stop_mpv(self):
+        # Stop state file timer
+        self.stop_state_file_timer = True
+        if self.state_file_timer_thread and self.state_file_timer_thread.is_alive():
+            self.state_file_timer_thread.join(timeout=1.0)
+            print("Stopped state file update timer")
+
         # Останавливаем наблюдение
         self.stop_observation = True
 
@@ -508,6 +603,15 @@ class MQTTClient:
                     try:
                         os.remove(playlist_path)
                         print(f"Old playlist removed: {playlist_path}")
+
+                        # Also clear state file when playlist is updated
+                        state_file = os.path.join(self.controller.config["mpv"]["media_dir"], "mpv_state.json")
+                        if os.path.exists(state_file):
+                            try:
+                                os.remove(state_file)
+                                print(f"State file cleared: {state_file}")
+                            except Exception as e:
+                                print(f"Failed to remove state file: {e}")
                     except Exception as e:
                         print(f"Failed to remove playlist: {e}")
                 if self.controller.prepare_playlist(force=True):
@@ -565,6 +669,14 @@ class MQTTClient:
 if __name__ == "__main__":
     try:
         controller = MPVController()
+
+        # Auto-start if state file and playlist exist
+        playlist_path = controller.get_playlist_path()
+        if os.path.exists(controller.state_file_path) and os.path.exists(playlist_path):
+            print("Found state file and playlist - auto-starting playback")
+            # Use the same playback start method as MQTT command handler
+            controller.handle_play_command(lambda state: None)
+
         print("MPV MQTT Controller started. Waiting for commands...")
         print("Send 'play' command to start playback, 'stop' to stop")
         MQTTClient(controller).run()
